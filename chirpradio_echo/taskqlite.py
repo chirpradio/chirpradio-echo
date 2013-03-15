@@ -45,7 +45,7 @@ class Log(object):
 log = Log()
 
 
-class ManagedQueue(object):
+class CentralQueue(object):
     """
     A central queue of background tasks.
 
@@ -97,7 +97,7 @@ class ManagedQueue(object):
         p = Process(target=dispatch, args=args, kwargs=kw)
         p.start()
 
-managed_q = ManagedQueue()
+central_q = CentralQueue()
 
 
 class Task(object):
@@ -109,7 +109,7 @@ class Task(object):
         self.id = id
 
     def delay(self, *args, **kw):
-        managed_q.apply_async(self.id, args, kw)
+        central_q.apply_async(self.id, args, kw)
 
 
 def task(fn):
@@ -119,7 +119,7 @@ def task(fn):
     The task interface is like that of celery's task queue.
     The implementation uses multiprocessing.
     """
-    id = managed_q.register(fn)
+    id = central_q.register(fn)
     return Task(id)
 
 
@@ -128,7 +128,7 @@ def dispatch(fn_id, *args, **kw):
         with lock():
             active_jobs.setdefault(fn_id, 0)
             active_jobs[fn_id] += 1
-        fn = managed_q.registry[fn_id]
+        fn = central_q.registry[fn_id]
         try:
             fn(*args, **kw)
         finally:

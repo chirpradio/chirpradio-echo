@@ -3,7 +3,7 @@ from multiprocessing import (current_process, Manager, Lock, Pipe, Pool,
 import optparse
 import time
 
-from .taskqlite import log, managed_q, still_working, task
+from .taskqlite import log, central_q, still_working, task
 
 
 @task
@@ -28,7 +28,7 @@ def main():
     log.info('Starting workers')
     for i in range(10):
         slicer.delay()
-    managed_q.work(concurrent_tasks=opt.qsize)
+    central_q.work(concurrent_tasks=opt.qsize)
 
 
 if __name__ == '__main__':
