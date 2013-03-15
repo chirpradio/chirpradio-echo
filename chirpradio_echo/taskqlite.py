@@ -46,6 +46,12 @@ log = Log()
 
 
 class ManagedQueue(object):
+    """
+    A central queue of background tasks.
+
+    Any time a process wants to fire a task in the background it
+    communicates it to the central queue. This queue manages the tasks.
+    """
     msg_types = {'apply_async': 1}
     registry = {}
     _ids = {'count': 0}
@@ -95,6 +101,9 @@ managed_q = ManagedQueue()
 
 
 class Task(object):
+    """
+    Proxy that delegates a function ID to the managed queue.
+    """
 
     def __init__(self, id):
         self.id = id
@@ -104,6 +113,12 @@ class Task(object):
 
 
 def task(fn):
+    """
+    Decorator that turns a function into a background task.
+
+    The task interface is like that of celery's task queue.
+    The implementation uses multiprocessing.
+    """
     id = managed_q.register(fn)
     return Task(id)
 
@@ -122,6 +137,9 @@ def dispatch(fn_id, *args, **kw):
 
 
 def still_working():
+    """
+    Returns True if tasks are still running.
+    """
     if len(active_jobs) == 0:
         # No jobs have started yet.
         return True
