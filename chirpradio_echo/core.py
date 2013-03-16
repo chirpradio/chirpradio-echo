@@ -1,5 +1,3 @@
-from multiprocessing import (current_process, Manager, Lock, Pipe, Pool,
-                             Process, Queue)
 import optparse
 import os
 import tempfile
@@ -111,15 +109,30 @@ def set_up_echonest():
         _e_setup = True
 
 
+@task
+def foo():
+    log.info('foo')
+    bar.delay()
+    time.sleep(5)
+
+
+@task
+def bar():
+    log.info('bar')
+    foo.delay()
+    time.sleep(10)
+
+
 def main():
     p = optparse.OptionParser(usage='%prog [options]')
-    p.add_option('-s', '--qsize', type=int, default=10,
+    p.add_option('-s', '--qsize', type=int, default=4,
                  help='Max number of concurrent tasks. '
+                      'Each worker gets its own process. '
                       'Default: %default')
     (opt, args) = p.parse_args()
-    log.info('Starting workers')
     listen.delay()
-    central_q.work(concurrent_tasks=opt.qsize)
+    #foo.delay()
+    central_q.work(num_workers=opt.qsize)
 
 
 if __name__ == '__main__':

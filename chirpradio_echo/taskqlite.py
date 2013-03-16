@@ -1,13 +1,12 @@
 from contextlib import contextmanager
-from multiprocessing import (current_process, Manager, Lock, Pipe, Pool,
-                             Process, Queue)
-import Queue as _Queue
+from multiprocessing import current_process, Manager, Process
 import time
+import traceback
 
 mgr = Manager()
 queue = mgr.Queue(maxsize=0)
 active_jobs = mgr.dict()
-queue_timeout = 10
+job_queue = mgr.list()
 
 
 _lock = mgr.Lock()
@@ -18,21 +17,6 @@ def lock():
         yield
     finally:
         _lock.release()
-
-
-_sema = None
-def set_task_sema(set_value):
-    global _sema
-    _sema = mgr.BoundedSemaphore(value=set_value)
-
-
-@contextmanager
-def task_sema():
-    _sema.acquire()
-    try:
-        yield
-    finally:
-        _sema.release()
 
 
 class Log(object):
@@ -52,7 +36,6 @@ class CentralQueue(object):
     Any time a process wants to fire a task in the background it
     communicates it to the central queue. This queue manages the tasks.
     """
-    msg_types = {'apply_async': 1}
     registry = {}
     _ids = {'count': 0}
 
@@ -63,53 +46,39 @@ class CentralQueue(object):
         return id
 
     def apply_async(self, fn_id, args, kw):
-        return queue.put([self.msg_types['apply_async'],
-                          fn_id, args, kw])
+        # Tell the central queue (in the main process) to schedule a task.
+        return queue.put([fn_id, args, kw])
 
-    def work(self, concurrent_tasks=4):
-        set_task_sema(concurrent_tasks)
+    def work(self, num_workers=4):
+        log.info('Workers started: %s' % num_workers)
+        for i in range(num_workers):
+            p = Process(target=worker)
+            p.start()
         while still_working():
-            try:
-                msg = queue.get(False, queue_timeout)
-            except _Queue.Empty:
-                continue
-
-            typ = msg.pop(0)
-            if typ not in self.msg_types.values():
-                raise ValueError('Unknown msg type: %s' % typ)
-            if typ == self.msg_types['apply_async']:
-                self.unpack_apply_async(msg)
-            else:
-                raise NotImplementedError('No handler yet for type %r' % typ)
+            msg = queue.get()
+            # Append a job to the stack for the next worker to pick up.
+            fn_id, args, kw = msg
+            job_queue.append((fn_id, args, kw))
             time.sleep(0.1)
-
-    def unpack_apply_async(self, msg):
-        # Unpack a message that looks like this:
-        # [fn_id, args, kw]
-        fn_id = msg.pop(0)
-        args = msg.pop(0)
-        kw = msg.pop(0)
-
-        # Add magic arg for dispatch.
-        args = list(args)
-        args.insert(0, fn_id)
-
-        p = Process(target=dispatch, args=args, kwargs=kw)
-        p.start()
 
 central_q = CentralQueue()
 
 
-class Task(object):
-    """
-    Proxy that delegates a function ID to the managed queue.
-    """
-
-    def __init__(self, id):
-        self.id = id
-
-    def delay(self, *args, **kw):
-        central_q.apply_async(self.id, args, kw)
+def worker():
+    while 1:
+        try:
+            job = job_queue.pop(0)
+        except IndexError:
+            time.sleep(2)
+            continue
+        fn_id, args, kw = job
+        try:
+            dispatch(fn_id, *args, **kw)
+        except KeyboardInterrupt:
+            raise
+        except:
+            log.info('Exception in %s' % fn_id)
+            traceback.print_exc()
 
 
 def task(fn):
@@ -120,20 +89,24 @@ def task(fn):
     The implementation uses multiprocessing.
     """
     id = central_q.register(fn)
-    return Task(id)
+
+    def delay(*args, **kw):
+        central_q.apply_async(id, args, kw)
+
+    fn.delay = delay
+    return fn
 
 
 def dispatch(fn_id, *args, **kw):
-    with task_sema():
+    with lock():
+        active_jobs.setdefault(fn_id, 0)
+        active_jobs[fn_id] += 1
+    fn = central_q.registry[fn_id]
+    try:
+        fn(*args, **kw)
+    finally:
         with lock():
-            active_jobs.setdefault(fn_id, 0)
-            active_jobs[fn_id] += 1
-        fn = central_q.registry[fn_id]
-        try:
-            fn(*args, **kw)
-        finally:
-            with lock():
-                active_jobs[fn_id] -= 1
+            active_jobs[fn_id] -= 1
 
 
 def still_working():
