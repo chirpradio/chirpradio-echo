@@ -77,7 +77,7 @@ def ask_echonest(chirpradio_id, filename):
 
         fp = song.util.codegen(filename)
         if len(fp) and "code" in fp[0]:
-            result = song.identify(query_obj=fp, version="4.11")
+            result = song.identify(query_obj=fp, version="4.12")
             if len(result):
                 data = {'match': {'artist_name': result[0].artist_name,
                                   'artist_id': result[0].artist_id,
