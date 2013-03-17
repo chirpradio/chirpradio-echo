@@ -2,6 +2,7 @@ import optparse
 import os
 import tempfile
 import time
+import traceback
 
 from pyechonest import config as echonest_conf
 from pyechonest import song
@@ -20,31 +21,37 @@ chirpradio_api = ('https://chirpradio.appspot.com/api/current_playlist'
 
 
 @task
-def listen(**kw):
-    run_gc()
-    res = requests.get(stream_url, stream=True, timeout=10)
-    log.info('Opening %s' % stream_url)
-    log.info('Writing temp files to %s/%s*.mp3' % (tempfile.gettempdir(),
-                                                   tmp_prefix))
+def listen():
+    try:
+        run_gc()
+        res = requests.get(stream_url, stream=True, timeout=10)
+        log.info('Opening %s' % stream_url)
+        log.info('Writing temp files to %s/%s*.mp3' % (tempfile.gettempdir(),
+                                                       tmp_prefix))
 
-    dest = None
-    bufsize = 0
-    for chunk in res.iter_content(chunk_size=2048):
-        if not dest:
-            dest = tempfile.NamedTemporaryFile(delete=False,
-                                               prefix=tmp_prefix,
-                                               suffix='.mp3')
-        dest.write(chunk)
-        bufsize += len(chunk)
-        if bufsize >= file_size:
-            bufsize = 0
-            dest.close()
-            ask_chirpradio.delay(dest.name)
-            dest = None
+        dest = None
+        bufsize = 0
+        for chunk in res.iter_content(chunk_size=2048):
+            if not dest:
+                dest = tempfile.NamedTemporaryFile(delete=False,
+                                                   prefix=tmp_prefix,
+                                                   suffix='.mp3')
+            dest.write(chunk)
+            bufsize += len(chunk)
+            if bufsize >= file_size:
+                bufsize = 0
+                dest.close()
+                ask_chirpradio.delay(dest.name)
+                dest = None
+    except Exception, exc:
+        traceback.print_exc()
+        log.info('Caught: %s. Restarting.' % exc)
+        time.sleep(3)
+        listen.delay()
 
 
 @task
-def ask_chirpradio(filename, **kw):
+def ask_chirpradio(filename):
     log.info('Ask chirpradio about %s' % os.path.split(filename)[1])
     try:
         # This is a best effort guess at what's currently playing.
@@ -63,7 +70,7 @@ def ask_chirpradio(filename, **kw):
 
 
 @task
-def ask_echonest(chirpradio_id, filename, **kw):
+def ask_echonest(chirpradio_id, filename):
     log.info('Ask echonest about %s' % os.path.split(filename)[1])
     try:
         set_up_echonest()

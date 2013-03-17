@@ -49,7 +49,7 @@ class CentralQueue(object):
         # Tell the central queue (in the main process) to schedule a task.
         return queue.put([fn_id, args, kw])
 
-    def work(self, num_workers=4):
+    def work(self, num_workers=4, forever=True):
         log.info('Workers started: %s' % num_workers)
         workers = []
 
@@ -61,7 +61,7 @@ class CentralQueue(object):
         for i in range(num_workers):
             start_worker()
 
-        while still_working():
+        while forever:
             msg = queue.get()
             # Append a job to the stack for the next worker to pick up.
             fn_id, args, kw = msg
