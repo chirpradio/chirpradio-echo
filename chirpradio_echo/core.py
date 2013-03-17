@@ -45,6 +45,7 @@ def listen(**kw):
 
 @task
 def ask_chirpradio(filename, **kw):
+    log.info('Ask chirpradio about %s' % os.path.split(filename)[1])
     try:
         # This is a best effort guess at what's currently playing.
         # The CHIRP stream is buffered and DJs are sometimes slow to
@@ -63,6 +64,7 @@ def ask_chirpradio(filename, **kw):
 
 @task
 def ask_echonest(chirpradio_id, filename, **kw):
+    log.info('Ask echonest about %s' % os.path.split(filename)[1])
     try:
         set_up_echonest()
 

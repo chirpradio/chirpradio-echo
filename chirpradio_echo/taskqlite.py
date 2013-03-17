@@ -51,15 +51,30 @@ class CentralQueue(object):
 
     def work(self, num_workers=4):
         log.info('Workers started: %s' % num_workers)
-        for i in range(num_workers):
+        workers = []
+
+        def start_worker():
             p = Process(target=worker)
             p.start()
+            workers.append(p)
+
+        for i in range(num_workers):
+            start_worker()
+
         while still_working():
             msg = queue.get()
             # Append a job to the stack for the next worker to pick up.
             fn_id, args, kw = msg
             job_queue.append((fn_id, args, kw))
-            time.sleep(0.1)
+
+            for i in range(len(workers)):
+                w = workers[i]
+                if not w.is_alive():
+                    workers.pop(i)
+                    log.info('Restarting a dead worker')
+                    start_worker()
+
+
 
 central_q = CentralQueue()
 
