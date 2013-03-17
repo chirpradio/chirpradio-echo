@@ -10,11 +10,11 @@ import requests
 
 from .taskqlite import log, central_q, task
 
-# Set a chunk size of roughly 908K.
-# This is about 40 seconds for 128kbps, give or take.
+# Set a chunk size of 908K.
+# This is about 46 seconds for 128kbps, give or take.
 # The mp3 stream's bitrate is not validated!
 file_size = 926343
-tmp_prefix = 'echoplex_'
+tmp_prefix = 'chirpradio_'
 stream_url = 'http://chirpradio.org/stream'
 chirpradio_api = ('https://chirpradio.appspot.com/api/current_playlist'
                   '?src=chirpradio-echo')
@@ -52,7 +52,7 @@ def listen():
 
 @task
 def ask_chirpradio(filename):
-    log.info('Ask chirpradio about %s' % os.path.split(filename)[1])
+    #log.info('Ask chirpradio about %s' % os.path.split(filename)[1])
     try:
         # This is a best effort guess at what's currently playing.
         # The CHIRP stream is buffered and DJs are sometimes slow to
@@ -70,17 +70,43 @@ def ask_chirpradio(filename):
 
 
 @task
-def ask_echonest(chirpradio_id, filename):
-    log.info('Ask echonest about %s' % os.path.split(filename)[1])
+def ask_echonest(chirp_trk, filename):
+    #log.info('Ask echonest about %s' % os.path.split(filename)[1])
     try:
         set_up_echonest()
 
         fp = song.util.codegen(filename)
         if len(fp) and "code" in fp[0]:
+            # Example of fp[0]:
+            #
+            # {u'code': u'eJzFmV...',
+            #  u'tag': 0, u'code_count': 846,
+            #  u'metadata': {u'codegen_time': 0.046138,
+            #                u'artist': u'',
+            #                u'title': u'',
+            #                u'release': u'',
+            #                u'given_duration': 30,
+            #                u'duration': 46,
+            #                u'start_offset': 0,
+            #                u'filename': u'/path/to/file.mp3',
+            #                u'genre': u'', u'version': 4.12,
+            #                u'sample_rate': 44100,
+            #                u'samples_decoded': 330614,
+            #                u'decode_time': 0.117867,
+            #                u'bitrate': 160}}]
+            md = fp[0]['metadata']
+            #log.info('given_duration=%s; duration=%s' % (md['given_duration'],
+            #                                             md['duration']))
+            md['artist'] = chirp_trk['artist']
+            md['release'] = chirp_trk['release']
+            md['title'] = chirp_trk['track']
+
             result = song.identify(query_obj=fp, version="4.12")
             if len(result):
                 data = {'match': {'artist_name': result[0].artist_name,
                                   'artist_id': result[0].artist_id,
+                                  'score': result[0].score,
+                                  'message': result[0].message,
                                   'title': result[0].title,
                                   'title_id': result[0].id}}
             else:
