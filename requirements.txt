@@ -1,4 +1,6 @@
 flask>=0.9
+mock>=1.0.1
+nose2>=0.4.5
 pyechonest>=7.1.0
 python-daemon>=1.6
 requests>=1.1.0

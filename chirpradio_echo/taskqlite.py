@@ -4,7 +4,6 @@ import time
 import traceback
 
 mgr = Manager()
-queue = mgr.Queue(maxsize=0)
 active_jobs = mgr.dict()
 job_queue = mgr.list()
 
@@ -36,37 +35,38 @@ class CentralQueue(object):
     Any time a process wants to fire a task in the background it
     communicates it to the central queue. This queue manages the tasks.
     """
-    registry = {}
+    # Note that these act as static variables and will be copied
+    # into new processes but that's ok.
+    _registry = {}
     _ids = {'count': 0}
 
     def register(self, fn):
         self._ids['count'] += 1
+        # Here are a couple things to note:
+        # - the register method is called at import time
+        # - each process should have a copy of the registry
         id = '%s-%s' % (fn.__name__, self._ids['count'])
-        self.registry[id] = fn
+        self._registry[id] = fn
         return id
 
-    def apply_async(self, fn_id, args, kw):
-        # Tell the central queue (in the main process) to schedule a task.
-        return queue.put([fn_id, args, kw])
+    def get_task(self, fn_id):
+        return self._registry[fn_id]
 
-    def work(self, num_workers=4, forever=True):
-        log.info('Workers started: %s' % num_workers)
+    def run_task(self, fn_id, args, kw):
+        job_queue.append((fn_id, args, kw))
+
+    def work(self, num_workers=4, forever=True,
+             max_worker_tasks=1000, heartbeat=4.0,
+             WorkerProc=Process):
         workers = []
 
         def start_worker():
-            p = Process(target=worker)
+            p = WorkerProc(target=do_work, args=tuple(),
+                           kwargs=dict(max_tasks=max_worker_tasks))
             p.start()
             workers.append(p)
 
-        for i in range(num_workers):
-            start_worker()
-
-        while forever:
-            msg = queue.get()
-            # Append a job to the stack for the next worker to pick up.
-            fn_id, args, kw = msg
-            job_queue.append((fn_id, args, kw))
-
+        def rebirth():
             for i in range(len(workers)):
                 w = workers[i]
                 if not w.is_alive():
@@ -74,29 +74,25 @@ class CentralQueue(object):
                     log.info('Restarting a dead worker')
                     start_worker()
 
+        for i in range(num_workers):
+            start_worker()
+
+        while forever:
+            time.sleep(heartbeat)
+            rebirth()
+
+        if not forever:
+            rebirth()
+            log.info('Shutting down workers')
+            for w in workers:
+                w.join()
+
 
 
 central_q = CentralQueue()
 
 
-def worker():
-    while 1:
-        try:
-            job = job_queue.pop(0)
-        except IndexError:
-            time.sleep(2)
-            continue
-        fn_id, args, kw = job
-        try:
-            dispatch(fn_id, *args, **kw)
-        except KeyboardInterrupt:
-            raise
-        except:
-            log.info('Exception in %s' % fn_id)
-            traceback.print_exc()
-
-
-def task(fn):
+def task(fn, central_q=central_q):
     """
     Decorator that turns a function into a background task.
 
@@ -106,22 +102,39 @@ def task(fn):
     id = central_q.register(fn)
 
     def delay(*args, **kw):
-        central_q.apply_async(id, args, kw)
+        central_q.run_task(id, args, kw)
 
     fn.delay = delay
     return fn
 
 
 def dispatch(fn_id, *args, **kw):
+    cq = kw.pop('_central_q', central_q)
     with lock():
         active_jobs.setdefault(fn_id, 0)
         active_jobs[fn_id] += 1
-    fn = central_q.registry[fn_id]
+    fn = cq.get_task(fn_id)
     try:
         fn(*args, **kw)
     finally:
         with lock():
             active_jobs[fn_id] -= 1
+
+
+def do_work(max_tasks=1000, dispatch=dispatch):
+    log.info('Starting work')
+    for i in range(max_tasks):
+        try:
+            job = job_queue.pop(0)
+        except IndexError:
+            time.sleep(2)
+            continue
+        fn_id, args, kw = job
+        try:
+            dispatch(fn_id, *args, **kw)
+        except:
+            log.info('Exception in %s' % fn_id)
+            traceback.print_exc()
 
 
 def still_working():
