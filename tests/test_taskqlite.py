@@ -130,7 +130,9 @@ class TestCentralQueue(TestCase):
         self.cq = CentralQueue()
 
     def work(self, **_kw):
-        kw = dict(forever=False, num_workers=2, max_worker_tasks=1)
+        def once():
+            yield
+        kw = dict(loop=once, num_workers=2, max_worker_tasks=1)
         kw.update(_kw)
         self.cq.work(**kw)
 

@@ -8,7 +8,7 @@ from pyechonest import config as echonest_conf
 from pyechonest import song
 import requests
 
-from .taskqlite import log, central_q, task
+from .taskqlite import central_q, log, ping, task
 
 # Set a chunk size of 908K.
 # This is about 46 seconds for 128kbps, give or take.
@@ -144,20 +144,6 @@ def set_up_echonest():
         _e_setup = True
 
 
-@task
-def foo():
-    log.info('foo')
-    bar.delay()
-    time.sleep(5)
-
-
-@task
-def bar():
-    log.info('bar')
-    foo.delay()
-    time.sleep(10)
-
-
 def main():
     p = optparse.OptionParser(usage='%prog [options]')
     p.add_option('-w', '--workers', type=int, default=4,
@@ -167,9 +153,14 @@ def main():
                  help='Max number of tasks per worker. '
                       'Lower this if you have a memory leak. '
                       'Default: %default')
+    p.add_option('-t', '--test', action='store_true',
+                 help='Run a ping/pong test instead of real tasks')
     (opt, args) = p.parse_args()
-    listen.delay()
-    #foo.delay()
+    if opt.test:
+        log.info('Running test tasks')
+        ping.delay()
+    else:
+        listen.delay()
     central_q.work(num_workers=opt.workers, max_worker_tasks=opt.max_tasks)
 
 

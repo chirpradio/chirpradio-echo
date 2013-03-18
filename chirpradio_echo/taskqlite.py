@@ -70,11 +70,16 @@ class CentralQueue(object):
     def run_task(self, fn_id, args, kw):
         task_queue.append((fn_id, args, kw))
 
-    def work(self, num_workers=4, forever=True,
+    def work(self, num_workers=4, loop=None,
              max_worker_tasks=1000, pulse=4.0,
              WorkerProc=Process, WatcherClass=Watcher):
         workers = []
         watch = WatcherClass()
+
+        if not loop:
+            # Loop forever.
+            def loop():
+                while True: yield
 
         def start_worker():
             p = WorkerProc(target=do_work, args=tuple(),
@@ -95,15 +100,13 @@ class CentralQueue(object):
         for i in range(num_workers):
             start_worker()
 
-        while forever:
+        for n in loop():
             time.sleep(pulse)
             heartbeat()
 
-        if not forever:
-            heartbeat()
-            log.info('Shutting down workers')
-            for w in workers:
-                w.join()
+        log.info('Shutting down workers')
+        for w in workers:
+            w.join()
 
 
 
@@ -153,3 +156,17 @@ def do_work(max_tasks=1000, dispatch=dispatch):
         except:
             log.info('Exception in %s' % fn_id)
             traceback.print_exc()
+
+
+@task
+def ping():
+    log.info('ping')
+    pong.delay()
+    time.sleep(5)
+
+
+@task
+def pong():
+    log.info('pong')
+    ping.delay()
+    time.sleep(6)
