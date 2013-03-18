@@ -106,7 +106,7 @@ def ask_echonest(chirp_trk, filename):
                 data = {'match': {'artist_name': result[0].artist_name,
                                   'artist_id': result[0].artist_id,
                                   'score': result[0].score,
-                                  'message': result[0].message,
+                                  #'message': result[0].message,
                                   'title': result[0].title,
                                   'title_id': result[0].id}}
             else:
