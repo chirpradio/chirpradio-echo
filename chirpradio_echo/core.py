@@ -160,14 +160,17 @@ def bar():
 
 def main():
     p = optparse.OptionParser(usage='%prog [options]')
-    p.add_option('-s', '--qsize', type=int, default=4,
-                 help='Max number of concurrent tasks. '
-                      'Each worker gets its own process. '
+    p.add_option('-w', '--workers', type=int, default=4,
+                 help='Number of concurrent workers. '
+                      'Default: %default')
+    p.add_option('-m', '--max-tasks', type=int, default=1000,
+                 help='Max number of tasks per worker. '
+                      'Lower this if you have a memory leak. '
                       'Default: %default')
     (opt, args) = p.parse_args()
     listen.delay()
     #foo.delay()
-    central_q.work(num_workers=opt.qsize)
+    central_q.work(num_workers=opt.workers, max_worker_tasks=opt.max_tasks)
 
 
 if __name__ == '__main__':
