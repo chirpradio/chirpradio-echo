@@ -162,12 +162,30 @@ class TestCentralQueue(TestCase):
         self.assertEquals(data['two'], 1)
 
     def test_rebirth(self):
-        inst = Mock()
-        inst.is_alive.return_value = False
-        wp = Mock()
-        wp.return_value = inst
+        proc = Mock()
+        proc.is_alive.return_value = False
+        wp = Mock(return_value=proc)
 
         self.work(WorkerProc=wp, num_workers=1)
 
-        assert len(inst.start.mock_calls) == 2, (
+        assert len(proc.start.mock_calls) == 2, (
                     'Dead worker should have been restarted')
+
+    def test_watch_pending(self):
+        watch = Mock()
+        wc = Mock(return_value=watch)
+
+        task_queue.append(('one', [], {}))
+        self.work(WorkerProc=Mock(), WatcherClass=wc)
+
+        watch.pending_task_count.assert_called_with(1)
+
+    def test_watch_active(self):
+        watch = Mock()
+        wc = Mock(return_value=watch)
+
+        active_tasks['one'] = 2
+        active_tasks['two'] = 1
+        self.work(WorkerProc=Mock(), WatcherClass=wc)
+
+        watch.active_task_count.assert_called_with(3)

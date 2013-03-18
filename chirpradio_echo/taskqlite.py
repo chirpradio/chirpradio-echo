@@ -28,6 +28,21 @@ class Log(object):
 log = Log()
 
 
+class Watcher(object):
+    """
+    Example of a watcher class.
+
+    You can implement these methods and pass your class to
+    CentralQueue.work().
+    """
+
+    def active_task_count(self, count):
+        pass
+
+    def pending_task_count(self, count):
+        pass
+
+
 class CentralQueue(object):
     """
     A central queue of background tasks.
@@ -56,9 +71,10 @@ class CentralQueue(object):
         task_queue.append((fn_id, args, kw))
 
     def work(self, num_workers=4, forever=True,
-             max_worker_tasks=1000, heartbeat=4.0,
-             WorkerProc=Process):
+             max_worker_tasks=1000, pulse=4.0,
+             WorkerProc=Process, WatcherClass=Watcher):
         workers = []
+        watch = WatcherClass()
 
         def start_worker():
             p = WorkerProc(target=do_work, args=tuple(),
@@ -66,23 +82,25 @@ class CentralQueue(object):
             p.start()
             workers.append(p)
 
-        def rebirth():
+        def heartbeat():
             for i in range(len(workers)):
                 w = workers[i]
                 if not w.is_alive():
                     workers.pop(i)
                     log.info('Restarting a dead worker')
                     start_worker()
+            watch.active_task_count(sum(active_tasks.values()))
+            watch.pending_task_count(len(task_queue))
 
         for i in range(num_workers):
             start_worker()
 
         while forever:
-            time.sleep(heartbeat)
-            rebirth()
+            time.sleep(pulse)
+            heartbeat()
 
         if not forever:
-            rebirth()
+            heartbeat()
             log.info('Shutting down workers')
             for w in workers:
                 w.join()
