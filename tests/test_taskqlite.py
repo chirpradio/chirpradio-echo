@@ -4,8 +4,8 @@ import unittest
 from mock import patch, Mock
 
 from chirpradio_echo import taskqlite
-from chirpradio_echo.taskqlite import (active_jobs, dispatch, CentralQueue,
-                                       do_work, job_queue, task)
+from chirpradio_echo.taskqlite import (active_tasks, dispatch, CentralQueue,
+                                       do_work, task_queue, task)
 
 mgr = Manager()
 
@@ -14,8 +14,8 @@ class TestCase(unittest.TestCase):
 
     def setUp(self):
         CentralQueue._registry.clear()
-        job_queue[:] = []
-        active_jobs.clear()
+        task_queue[:] = []
+        active_tasks.clear()
         self.patches = []
         self.addCleanup(self.stop_patches)
 
@@ -47,19 +47,19 @@ class TestWork(TestCase):
     def test_work(self):
         args = ['foo']
         kw = {'bar': 1}
-        job_queue.append(('fn-id', args, kw))
+        task_queue.append(('fn-id', args, kw))
         self.work()
         self.dispatch.assert_called_with('fn-id', *args, **kw)
 
     def test_more_work(self):
-        job_queue.append(('one', [], {}))
-        job_queue.append(('two', [], {}))
+        task_queue.append(('one', [], {}))
+        task_queue.append(('two', [], {}))
         self.work(max_tasks=2)
         self.assertEquals(self.dispatch.mock_calls[0][1][0], 'one')
         self.assertEquals(self.dispatch.mock_calls[1][1][0], 'two')
 
     def test_catch_exceptions(self):
-        job_queue.append(('fn-id', [], {}))
+        task_queue.append(('fn-id', [], {}))
         self.dispatch.side_effect = RuntimeError
         self.work()  # exception not raised
 
@@ -82,11 +82,11 @@ class TestDispatch(TestCase):
 
     def test_task_count(self):
         def check():
-            self.assertEqual(active_jobs['fn'], 1)
+            self.assertEqual(active_tasks['fn'], 1)
         self.task.side_effect = check
         self.dispatch('fn')
         assert self.task.called
-        self.assertEqual(active_jobs['fn'], 0)
+        self.assertEqual(active_tasks['fn'], 0)
 
     def test_task_fail(self):
         self.task.side_effect = ValueError
@@ -94,7 +94,7 @@ class TestDispatch(TestCase):
             self.dispatch('fn')
         assert self.task.called
         # Count was decremented on fail.
-        self.assertEqual(active_jobs['fn'], 0)
+        self.assertEqual(active_tasks['fn'], 0)
 
 
 class TestTasks(TestCase):

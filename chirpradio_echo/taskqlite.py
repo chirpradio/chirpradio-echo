@@ -4,11 +4,11 @@ import time
 import traceback
 
 mgr = Manager()
-active_jobs = mgr.dict()
-job_queue = mgr.list()
-
-
+active_tasks = mgr.dict()
+task_queue = mgr.list()
 _lock = mgr.Lock()
+
+
 @contextmanager
 def lock():
     _lock.acquire()
@@ -53,7 +53,7 @@ class CentralQueue(object):
         return self._registry[fn_id]
 
     def run_task(self, fn_id, args, kw):
-        job_queue.append((fn_id, args, kw))
+        task_queue.append((fn_id, args, kw))
 
     def work(self, num_workers=4, forever=True,
              max_worker_tasks=1000, heartbeat=4.0,
@@ -111,37 +111,27 @@ def task(fn, central_q=central_q):
 def dispatch(fn_id, *args, **kw):
     cq = kw.pop('_central_q', central_q)
     with lock():
-        active_jobs.setdefault(fn_id, 0)
-        active_jobs[fn_id] += 1
+        active_tasks.setdefault(fn_id, 0)
+        active_tasks[fn_id] += 1
     fn = cq.get_task(fn_id)
     try:
         fn(*args, **kw)
     finally:
         with lock():
-            active_jobs[fn_id] -= 1
+            active_tasks[fn_id] -= 1
 
 
 def do_work(max_tasks=1000, dispatch=dispatch):
     log.info('Starting work')
     for i in range(max_tasks):
         try:
-            job = job_queue.pop(0)
+            task = task_queue.pop(0)
         except IndexError:
             time.sleep(2)
             continue
-        fn_id, args, kw = job
+        fn_id, args, kw = task
         try:
             dispatch(fn_id, *args, **kw)
         except:
             log.info('Exception in %s' % fn_id)
             traceback.print_exc()
-
-
-def still_working():
-    """
-    Returns True if tasks are still running.
-    """
-    if len(active_jobs) == 0:
-        # No jobs have started yet.
-        return True
-    return any(count > 0 for count in active_jobs.values())
