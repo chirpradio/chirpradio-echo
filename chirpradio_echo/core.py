@@ -1,3 +1,4 @@
+import logging
 import optparse
 import os
 import tempfile
@@ -155,6 +156,7 @@ def main():
     p.add_option('-t', '--test', action='store_true',
                  help='Run a ping/pong test instead of real tasks')
     (opt, args) = p.parse_args()
+    logging.getLogger('requests').setLevel(logging.CRITICAL)
     if opt.test:
         log.info('Running test tasks')
         ping.delay()
