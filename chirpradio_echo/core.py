@@ -24,25 +24,24 @@ chirpradio_api = ('https://chirpradio.appspot.com/api/current_playlist'
 def listen():
     try:
         run_gc()
-        res = requests.get(stream_url, stream=True, timeout=10)
-        log.info('Opening %s' % stream_url)
-        log.info('Writing temp files to %s/%s*.mp3' % (tempfile.gettempdir(),
-                                                       tmp_prefix))
-
-        dest = None
+        dest = tempfile.NamedTemporaryFile(delete=False,
+                                           prefix=tmp_prefix,
+                                           suffix='.mp3')
         bufsize = 0
+        res = requests.get(stream_url, stream=True, timeout=10)
         for chunk in res.iter_content(chunk_size=2048):
-            if not dest:
-                dest = tempfile.NamedTemporaryFile(delete=False,
-                                                   prefix=tmp_prefix,
-                                                   suffix='.mp3')
             dest.write(chunk)
             bufsize += len(chunk)
             if bufsize >= file_size:
-                bufsize = 0
-                dest.close()
-                ask_chirpradio.delay(dest.name)
-                dest = None
+                break
+
+        dest.close()
+        log.info('Sample: %s' % dest.name)
+        ask_chirpradio.delay(dest.name)
+        # Restart.
+        listen.delay()
+        res.close()
+
     except Exception, exc:
         traceback.print_exc()
         log.info('Caught: %s. Restarting.' % exc)
