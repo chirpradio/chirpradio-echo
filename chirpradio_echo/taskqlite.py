@@ -1,29 +1,18 @@
-from contextlib import contextmanager
-from multiprocessing import current_process, Manager, Process
+from threading import current_thread, Lock, Thread
 import time
 import traceback
 
-mgr = Manager()
-active_tasks = mgr.dict()
-task_queue = mgr.list()
-_lock = mgr.Lock()
-
-
-@contextmanager
-def lock():
-    _lock.acquire()
-    try:
-        yield
-    finally:
-        _lock.release()
+active_tasks = {}
+task_queue = []
+lock = Lock()
+messages = {'shutdown': False}
 
 
 class Log(object):
 
     def info(self, msg):
-        proc = current_process()
-        with lock():
-            print '[p:%s] %s' % (proc.pid, msg)
+        with lock:
+            print '[%s] %s' % (hex(current_thread().ident), msg)
 
 log = Log()
 
@@ -50,8 +39,6 @@ class CentralQueue(object):
     Any time a process wants to fire a task in the background it
     communicates it to the central queue. This queue manages the tasks.
     """
-    # Note that these act as static variables and will be copied
-    # into new processes but that's ok.
     _registry = {}
     _ids = {'count': 0}
 
@@ -68,11 +55,12 @@ class CentralQueue(object):
         return self._registry[fn_id]
 
     def run_task(self, fn_id, args, kw):
-        task_queue.append((fn_id, args, kw))
+        with lock:
+            task_queue.append((fn_id, args, kw))
 
     def work(self, num_workers=4, loop=None,
              max_worker_tasks=1000, pulse=4.0,
-             WorkerProc=Process, WatcherClass=Watcher):
+             WorkerProc=Thread, WatcherClass=Watcher):
         workers = []
         watch = WatcherClass()
 
@@ -100,11 +88,16 @@ class CentralQueue(object):
         for i in range(num_workers):
             start_worker()
 
-        for n in loop():
-            time.sleep(pulse)
-            heartbeat()
+        try:
+            for n in loop():
+                time.sleep(pulse)
+                heartbeat()
+        except KeyboardInterrupt:
+            pass
 
         log.info('Shutting down workers')
+        with lock:
+            messages['shutdown'] = True
         for w in workers:
             w.join()
 
@@ -131,22 +124,25 @@ def task(fn, central_q=central_q):
 
 def dispatch(fn_id, *args, **kw):
     cq = kw.pop('_central_q', central_q)
-    with lock():
+    with lock:
         active_tasks.setdefault(fn_id, 0)
         active_tasks[fn_id] += 1
     fn = cq.get_task(fn_id)
     try:
         fn(*args, **kw)
     finally:
-        with lock():
+        with lock:
             active_tasks[fn_id] -= 1
 
 
 def do_work(max_tasks=1000, dispatch=dispatch):
     log.info('Starting work')
     for i in range(max_tasks):
+        if messages['shutdown']:
+            return
         try:
-            task = task_queue.pop(0)
+            with lock:
+                task = task_queue.pop(0)
         except IndexError:
             time.sleep(2)
             continue
@@ -155,7 +151,8 @@ def do_work(max_tasks=1000, dispatch=dispatch):
             dispatch(fn_id, *args, **kw)
         except:
             log.info('Exception in %s' % fn_id)
-            traceback.print_exc()
+            with lock:
+                traceback.print_exc()
 
 
 @task

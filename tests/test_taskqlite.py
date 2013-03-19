@@ -1,13 +1,10 @@
-from multiprocessing import Manager
 import unittest
 
 from mock import patch, Mock
 
 from chirpradio_echo import taskqlite
 from chirpradio_echo.taskqlite import (active_tasks, dispatch, CentralQueue,
-                                       do_work, task_queue, task)
-
-mgr = Manager()
+                                       do_work, messages, task_queue, task)
 
 
 class TestCase(unittest.TestCase):
@@ -16,6 +13,8 @@ class TestCase(unittest.TestCase):
         CentralQueue._registry.clear()
         task_queue[:] = []
         active_tasks.clear()
+        messages['shutdown'] = False
+
         self.patches = []
         self.addCleanup(self.stop_patches)
 
@@ -62,6 +61,12 @@ class TestWork(TestCase):
         task_queue.append(('fn-id', [], {}))
         self.dispatch.side_effect = RuntimeError
         self.work()  # exception not raised
+
+    def test_shutdown(self):
+        task_queue.append(('fn-id', [], {}))
+        messages['shutdown'] = True
+        self.work()
+        assert not self.dispatch.called, 'Worker should have shut down'
 
 
 class TestDispatch(TestCase):
@@ -146,7 +151,7 @@ class TestCentralQueue(TestCase):
         self.assertEquals(self.cq.get_task(fn_id), foo)
 
     def test_work(self):
-        data = mgr.dict({'one': 0, 'two': 0})
+        data = {'one': 0, 'two': 0}
 
         @self.task
         def one():
