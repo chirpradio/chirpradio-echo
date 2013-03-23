@@ -35,9 +35,13 @@ Install the Python stuff::
     pip install -r requirements.txt
     python setup.py develop
 
-Run it::
+Run the daemon::
 
     ECHO_NEST_API_KEY=... ch-echo
+
+Run the tests::
+
+    nose2
 
 Get In Touch
 ------------
