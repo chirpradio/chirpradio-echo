@@ -111,7 +111,6 @@ def task(fn, central_q=central_q):
     Decorator that turns a function into a background task.
 
     The task interface is like that of celery's task queue.
-    The implementation uses multiprocessing.
     """
     id = central_q.register(fn)
 
