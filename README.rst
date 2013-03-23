@@ -1,7 +1,18 @@
-Behold! This is a scrubber for CHIRP Radio's audio stream.
-It uses EchoNest to fingerprint the audio and figure out what's playing.
-If it doesn't get a match then it tells EchoNest what the DJ is currently
-playing.
+Ambient echo of all `CHIRP Radio`_ music data, as it happens.
+
+This is an experiment to see how many audio fingerprints we can seed into the
+open `Echo Nest API`_. The echo daemon collects 40 second chunks from the
+`CHIRP Radio`_ live stream, makes a fingerprint, then asks the `CHIRP Radio API`_ what song
+is playing. It posts the artist, track name, album, and fingerprint to Echo Nest.
+
+CHIRP broadcasts 7 days a week, 18 hours a day; it's all live and we focus on a
+lot new releases. If the fingerprint seeding is useful we could try running it
+through the history of all CHIRP Radio which is about 19,710 hours of music so
+far (since 2010), all archived and each song identified.
+
+.. _`Echo Nest API` : http://developer.echonest.com/index.html
+.. _`CHIRP Radio`: http://chirpradio.org/
+.. _`CHIRP Radio API`: http://code.google.com/p/chirpradio/wiki/TheChirpApi
 
 Install some libs::
 
@@ -24,4 +35,9 @@ Install the Python stuff::
 
 Run it::
 
-    ch-echo
+    ECHO_NEST_API_KEY=... ch-echo
+
+Get In Touch
+------------
+
+http://groups.google.com/group/chirpdev/
