@@ -165,6 +165,8 @@ class TestCentralQueue(TestCase):
         two.delay()
         self.work()
 
+        # This sometimes fails but the problem is not solved by adding a sleep
+        # time.
         self.assertEquals(data['one'], 1)
         self.assertEquals(data['two'], 1)
 
